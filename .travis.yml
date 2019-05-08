@@ -3,7 +3,7 @@ os: linux
 dist: trusty
 language: python
 python: 3.6
-group: deprecated-2017Q4
+group: bionic
 services:
   - docker
 matrix:
@@ -12,10 +12,11 @@ matrix:
     - env: TEST="lint"
       language: node_js
       node_js:
-        - "node"
+        - "lts/*"
     - env: TEST="unittests"
       language: node_js
-      node_js: 9
+      node_js:
+        - "lts/*"
     - env: TEST="validations"
     - env: TEST="fetch"
     - env: TEST="preloaded"

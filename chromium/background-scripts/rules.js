@@ -25,6 +25,17 @@ const nullIterable = Object.create(null, {
   },
 });
 
+/* A map of all scope RegExp objects */
+const scopes = new Map();
+
+/* Returns the scope object from the map for the given scope string */
+function getScope(scope) {
+  if (!scopes.has(scope)) {
+    scopes.set(scope, new RegExp(scope));
+  }
+  return scopes.get(scope);
+}
+
 /**
  * Constructs a single rule
  * @param from
@@ -81,13 +92,14 @@ function CookieRule(host, cookiename) {
  * @param note Note will be displayed in popup
  * @constructor
  */
-function RuleSet(set_name, default_state, note) {
+function RuleSet(set_name, default_state, scope, note) {
   this.name = set_name;
   this.rules = [];
   this.exclusions = null;
   this.cookierules = null;
   this.active = default_state;
   this.default_state = default_state;
+  this.scope = scope;
   this.note = note;
 }
 
@@ -162,7 +174,7 @@ RuleSet.prototype = {
     }
 
     if(this_rules_length > 0) {
-      for(let x = 0; x < this.rules.length; x++){
+      for(let x = 0; x < this.rules.length; x++) {
         if(this.rules[x].to != ruleset.rules[x].to) {
           return false;
         }
@@ -209,40 +221,45 @@ RuleSets.prototype = {
     this.store = store;
     this.ruleActiveStates = await this.store.get_promise('ruleActiveStates', {});
     await applyStoredFunc(this);
-    this.loadStoredUserRules();
+    await this.loadStoredUserRules();
     await this.addStoredCustomRulesets();
   },
 
   /**
    * Iterate through data XML and load rulesets
    */
-  addFromXml: function(ruleXml) {
-    var sets = ruleXml.getElementsByTagName("ruleset");
-    for (let s of sets) {
+  addFromXml: function(ruleXml, scope) {
+    const scope_obj = getScope(scope);
+    const rulesets = ruleXml.getElementsByTagName("ruleset");
+    for (let ruleset of rulesets) {
       try {
-        this.parseOneXmlRuleset(s);
+        this.parseOneXmlRuleset(ruleset, scope_obj);
       } catch (e) {
         util.log(util.WARN, 'Error processing ruleset:' + e);
       }
     }
   },
 
-  addFromJson: function(ruleJson) {
+  addFromJson: function(ruleJson, scope) {
+    const scope_obj = getScope(scope);
     for (let ruleset of ruleJson) {
       try {
-        this.parseOneJsonRuleset(ruleset);
+        this.parseOneJsonRuleset(ruleset, scope_obj);
       } catch(e) {
         util.log(util.WARN, 'Error processing ruleset:' + e);
       }
     }
   },
 
-  parseOneJsonRuleset: function(ruletag) {
+  parseOneJsonRuleset: function(ruletag, scope) {
     var default_state = true;
     var note = "";
     var default_off = ruletag["default_off"];
     if (default_off) {
       default_state = false;
+      if (default_off === "user rule") {
+        default_state = true;
+      }
       note += default_off + "\n";
     }
 
@@ -257,7 +274,7 @@ RuleSets.prototype = {
       note += "Platform(s): " + platform + "\n";
     }
 
-    var rule_set = new RuleSet(ruletag["name"], default_state, note.trim());
+    var rule_set = new RuleSet(ruletag["name"], default_state, scope, note.trim());
 
     // Read user prefs
     if (rule_set.name in this.ruleActiveStates) {
@@ -304,20 +321,16 @@ RuleSets.prototype = {
    * @param params
    * @returns {boolean}
    */
-  addUserRule : function(params) {
+  addUserRule : function(params, scope) {
     util.log(util.INFO, 'adding new user rule for ' + JSON.stringify(params));
-    var new_rule_set = new RuleSet(params.host, true, "user rule");
-    var new_rule = getRule(params.urlMatcher, params.redirectTo);
-    new_rule_set.rules.push(new_rule);
-    if (!this.targets.has(params.host)) {
-      this.targets.set(params.host, []);
+    this.parseOneJsonRuleset(params, scope);
+
+    // clear cache so new rule take effect immediately
+    for (const target of params.target) {
+      this.ruleCache.delete(target);
     }
-    this.ruleCache.delete(params.host);
+
     // TODO: maybe promote this rule?
-    this.targets.get(params.host).push(new_rule_set);
-    if (new_rule_set.name in this.ruleActiveStates) {
-      new_rule_set.active = this.ruleActiveStates[new_rule_set.name];
-    }
     util.log(util.INFO, 'done adding rule');
     return true;
   },
@@ -327,20 +340,33 @@ RuleSets.prototype = {
    * @param params
    * @returns {boolean}
    */
-  removeUserRule: function(ruleset) {
+  removeUserRule: function(ruleset, src) {
+    /**
+     * FIXME: We have to use ruleset.name here because the ruleset itself
+     * carries no information on the target it is applying on. This also
+     * made it impossible for users to set custom ruleset name.
+     */
     util.log(util.INFO, 'removing user rule for ' + JSON.stringify(ruleset));
+
+    // Remove any cache from runtime
     this.ruleCache.delete(ruleset.name);
 
+    if (src === 'popup') {
+      const tmp = this.targets.get(ruleset.name).filter(r => !r.isEquivalentTo(ruleset))
+      this.targets.set(ruleset.name, tmp);
 
-    var tmp = this.targets.get(ruleset.name).filter(r =>
-      !(r.isEquivalentTo(ruleset))
-    );
-    this.targets.set(ruleset.name, tmp);
-
-    if (this.targets.get(ruleset.name).length == 0) {
-      this.targets.delete(ruleset.name);
+      if (this.targets.get(ruleset.name).length == 0) {
+        this.targets.delete(ruleset.name);
+      }
     }
 
+    if (src === 'options') {
+      /**
+       * FIXME: There is nothing we can do if the call comes from the
+       * option page because isEquivalentTo cannot work reliably.
+       * Leave the heavy duties to background.js to call initializeAllRules
+       */
+    }
     util.log(util.INFO, 'done removing rule');
     return true;
   },
@@ -355,12 +381,12 @@ RuleSets.prototype = {
   /**
   * Load all stored user rules into this RuleSet object
   */
-  loadStoredUserRules: async function() {
-    const user_rules = await this.getStoredUserRules();
-    for (let user_rule of user_rules) {
-      this.addUserRule(user_rule);
-    }
-    util.log(util.INFO, 'loaded ' + user_rules.length + ' stored user rules');
+  loadStoredUserRules: function() {
+    return this.getStoredUserRules()
+      .then(userRules => {
+        this.addFromJson(userRules, getScope());
+        util.log(util.INFO, `loaded ${userRules.length} stored user rules`);
+      });
   },
 
   /**
@@ -369,7 +395,7 @@ RuleSets.prototype = {
   * @param cb: Callback to call after success/fail
   * */
   addNewRuleAndStore: async function(params) {
-    if (this.addUserRule(params)) {
+    if (this.addUserRule(params, getScope())) {
       // If we successfully added the user rule, save it in the storage
       // api so it's automatically applied when the extension is
       // reloaded.
@@ -386,19 +412,26 @@ RuleSets.prototype = {
   * Removes a user rule
   * @param ruleset: the ruleset to remove
   * */
-  removeRuleAndStore: async function(ruleset) {
-    if (this.removeUserRule(ruleset)) {
-      // If we successfully removed the user rule, remove it in local storage too
+  removeRuleAndStore: async function(ruleset, src) {
+    if (this.removeUserRule(ruleset, src)) {
       let userRules = await this.getStoredUserRules();
-      userRules = userRules.filter(r =>
-        !(r.host == ruleset.name &&
-          r.redirectTo == ruleset.rules[0].to)
-      );
+
+      if (src === 'popup') {
+        userRules = userRules.filter(r =>
+          !(r.name === ruleset.name && r.rule[0].to === ruleset.rules[0].to)
+        );
+      }
+
+      if (src === 'options') {
+        userRules = userRules.filter(r =>
+          !(r.name === ruleset.name && r.rule[0].to === ruleset.rule[0].to)
+        );
+      }
       await this.store.set_promise(this.USER_RULE_KEY, userRules);
     }
   },
 
-  addStoredCustomRulesets: function(){
+  addStoredCustomRulesets: function() {
     return new Promise(resolve => {
       this.store.get({
         legacy_custom_rulesets: [],
@@ -412,17 +445,17 @@ RuleSets.prototype = {
   },
 
   // Load in the legacy custom rulesets, if any
-  loadCustomRulesets: function(legacy_custom_rulesets){
-    for(let legacy_custom_ruleset of legacy_custom_rulesets){
+  loadCustomRulesets: function(legacy_custom_rulesets) {
+    for(let legacy_custom_ruleset of legacy_custom_rulesets) {
       this.loadCustomRuleset(legacy_custom_ruleset);
     }
   },
 
-  loadCustomRuleset: function(ruleset_string){
+  loadCustomRuleset: function(ruleset_string) {
     this.addFromXml((new DOMParser()).parseFromString(ruleset_string, 'text/xml'));
   },
 
-  setRuleActiveState: async function(ruleset_name, active){
+  setRuleActiveState: async function(ruleset_name, active) {
     if (active == undefined) {
       delete this.ruleActiveStates[ruleset_name];
     } else {
@@ -435,12 +468,15 @@ RuleSets.prototype = {
    * Does the loading of a ruleset.
    * @param ruletag The whole <ruleset> tag to parse
    */
-  parseOneXmlRuleset: function(ruletag) {
+  parseOneXmlRuleset: function(ruletag, scope) {
     var default_state = true;
     var note = "";
     var default_off = ruletag.getAttribute("default_off");
     if (default_off) {
       default_state = false;
+      if (default_off === "user rule") {
+        default_state = true;
+      }
       note += default_off + "\n";
     }
 
@@ -457,6 +493,7 @@ RuleSets.prototype = {
 
     var rule_set = new RuleSet(ruletag.getAttribute("name"),
       default_state,
+      scope,
       note.trim());
 
     // Read user prefs
@@ -525,22 +562,23 @@ RuleSets.prototype = {
       return nullIterable;
     }
 
-    // Replace each portion of the domain with a * in turn
+    // Replace www.example.com with www.example.*
+    // eat away from the right for once and only once
     let segmented = host.split(".");
-    for (let i = 0; i < segmented.length; i++) {
-      let tmp = segmented[i];
-      segmented[i] = "*";
+    if (segmented.length > 1) {
+      const tmp = segmented[segmented.length - 1];
+      segmented[segmented.length - 1] = "*";
 
       results = (this.targets.has(segmented.join(".")) ?
         new Set([...results, ...this.targets.get(segmented.join("."))]) :
         results);
 
-      segmented[i] = tmp;
+      segmented[segmented.length - 1] = tmp;
     }
 
     // now eat away from the left, with *, so that for x.y.z.google.com we
-    // check *.z.google.com and *.google.com (we did *.y.z.google.com above)
-    for (let i = 2; i <= segmented.length - 2; i++) {
+    // check *.y.z.google.com, *.z.google.com and *.google.com
+    for (let i = 1; i <= segmented.length - 2; i++) {
       let t = "*." + segmented.slice(i, segmented.length).join(".");
 
       results = (this.targets.has(t) ?
@@ -588,11 +626,10 @@ RuleSets.prototype = {
     }
 
     var potentiallyApplicable = this.potentiallyApplicableRulesets(hostname);
-    for (let ruleset of potentiallyApplicable) {
+    for (const ruleset of potentiallyApplicable) {
       if (ruleset.cookierules !== null && ruleset.active) {
-        for (let cookierules of ruleset.cookierules) {
-          var cr = cookierules;
-          if (cr.host_c.test(cookie.domain) && cr.name_c.test(cookie.name)) {
+        for (const cookierule of ruleset.cookierules) {
+          if (cookierule.host_c.test(cookie.domain) && cookierule.name_c.test(cookie.name)) {
             return ruleset;
           }
         }
@@ -645,10 +682,7 @@ RuleSets.prototype = {
     util.log(util.INFO, "Testing securecookie applicability with " + test_uri);
     var potentiallyApplicable = this.potentiallyApplicableRulesets(domain);
     for (let ruleset of potentiallyApplicable) {
-      if (!ruleset.active) {
-        continue;
-      }
-      if (ruleset.apply(test_uri)) {
+      if (ruleset.active && ruleset.apply(test_uri)) {
         util.log(util.INFO, "Cookie domain could be secured.");
         this.cookieHostCache.set(domain, true);
         return true;
