@@ -52,14 +52,15 @@ if type apt-get>/dev/null 2>&1;  then
     $SUDO_SHIM chown root /usr/bin/geckodriver
     $SUDO_SHIM chmod 755 /usr/bin/geckodriver
   fi
-  if [ ! -f /usr/lib/chromium/chromedriver ] && [ -f `which chromedriver` ]; then
-    $SUDO_SHIM ln -s `which chromedriver` /usr/lib/chromium/chromedriver
+  if [ ! -f /usr/lib/chromium-browser/chromedriver ] && [ -f `which chromedriver` ]; then
+    $SUDO_SHIM ln -s `which chromedriver` /usr/lib/chromium-browser/chromedriver
   fi
 
 # macOS installation
 elif type brew >/dev/null 2>&1; then
   brew list python &>/dev/null || brew install python
-  brew install libxml2 gnu-sed chromedriver
+  brew cask install chromedriver
+  brew install libxml2 gnu-sed
   if ! echo $PATH | grep -ql /usr/local/bin ; then
     echo '/usr/local/bin not found in $PATH, please add it.'
   fi

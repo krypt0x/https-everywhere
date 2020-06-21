@@ -47,10 +47,10 @@ function toggleSeeMore(event) {
 
   if(arrow.classList.contains('down')) {
     arrow.classList.replace('down', 'up');
-    text.innerText = 'See less';
+    text.innerText = chrome.i18n.getMessage("menu_seeLess");
   } else if (arrow.classList.contains('up')) {
     arrow.classList.replace('up', 'down');
-    text.innerText = 'See more';
+    text.innerText = chrome.i18n.getMessage("menu_seeMore");
   }
 
   if (content.classList.contains('hide')) {
@@ -69,9 +69,6 @@ function toggleSeeMore(event) {
  */
 function appendRulesToListDiv(rulesets, list_div, ruleType) {
   if (rulesets && rulesets.length) {
-    let counter = rulesets.length;
-    let counterElement = document.querySelector("#RuleManagement--counter");
-    counterElement.innerText = counter;
     // template parent block for each ruleset
     let templateLine = document.createElement("div");
     templateLine.className = "rule checkbox";
@@ -139,8 +136,11 @@ function showHttpNowhereUI() {
   getOption_('httpNowhere', false, function(item) {
     if (item.httpNowhere) {
       e('http-nowhere-checkbox').checked = true;
-      e('HttpNowhere__header').innerText = 'Encrypt All Sites Eligible is ON';
-      e('HttpNowhere__explained').innerText = 'Unencrypted requests are currently blocked';
+      e('HttpNowhere__header').innerText = chrome.i18n.getMessage("menu_encryptAllSitesEligibleOn");
+      e('HttpNowhere__explained').innerText = chrome.i18n.getMessage("menu_httpNoWhereExplainedBlocked");
+    } else {
+      e('HttpNowhere__header').innerText = chrome.i18n.getMessage("menu_encryptAllSitesEligibleOff");
+      e('HttpNowhere__explained').innerText = chrome.i18n.getMessage("menu_httpNoWhereExplainedAllowed");
     }
     e('HttpNowhere').style.visibility = "visible";
   });
@@ -153,7 +153,7 @@ function updateEnabledDisabledUI() {
     e('disableButton').style.visibility = "visible";
     // Hide or show the rules sections
     if (item.globalEnabled) {
-      document.body.className = ""
+      document.body.className = "";
       e('onoffswitch_label').innerText = chrome.i18n.getMessage("menu_globalEnable");
       showHttpNowhereUI();
     } else {
@@ -172,7 +172,7 @@ function toggleEnabledDisabled() {
       chrome.tabs.reload();
       window.close();
     }, 1500);
-  }
+  };
 
   getOption_('globalEnabled', true, function(item) {
     setOption_('globalEnabled', !item.globalEnabled, extension_toggle_effect);
@@ -184,8 +184,13 @@ function toggleEnabledDisabled() {
  * @param activeTab
  */
 function listRules(activeTab) {
-  sendMessage("get_active_rulesets", activeTab.id, function(rulesets) {
+  sendMessage("get_applied_rulesets", activeTab.id, function(rulesets) {
     if (rulesets) {
+      // show the number of potentially applicable rulesets
+      let counter = rulesets.length;
+      let counterElement = document.querySelector("#RuleManagement--counter");
+      counterElement.innerText = counter;
+
       const stableRules = rulesets.filter(ruleset => ruleset.default_state);
       const unstableRules = rulesets.filter(ruleset => !ruleset.default_state);
 
@@ -248,7 +253,7 @@ document.addEventListener("DOMContentLoaded", function () {
     timestamp_span.className = "rulesets-version";
     timestamp_span.innerText = `${chrome.i18n.getMessage("about_rulesets_version")} ${update_channel_name}: ${ruleset_version_string}`;
     this.appendChild(timestamp_span);
-  }
+  };
 
   sendMessage("get_ruleset_timestamps", null, timestamps => {
     let replaces = timestamps.some(([update_channel, timestamp]) =>
@@ -379,11 +384,11 @@ function toggleHttpNowhere() {
       setOption_('httpNowhere', enabled, () => {
         if (enabled) {
           chrome.tabs.reload(tab.id);
-          e('HttpNowhere__header').innerText = 'Encrypt All Sites Eligible is ON';
-          e('HttpNowhere__explained').innerText = 'Unencrypted requests are currently blocked';
+          e('HttpNowhere__header').innerText = chrome.i18n.getMessage("menu_encryptAllSitesEligibleOn");
+          e('HttpNowhere__explained').innerText = chrome.i18n.getMessage("menu_httpNoWhereExplainedBlocked");
         } else {
-          e('HttpNowhere__header').innerText = 'Encrypt All Sites Eligible is OFF';
-          e('HttpNowhere__explained').innerText = 'Unencrypted requests are currently allowed';
+          e('HttpNowhere__header').innerText = chrome.i18n.getMessage("menu_encryptAllSitesEligibleOff");
+          e('HttpNowhere__explained').innerText = chrome.i18n.getMessage("menu_httpNoWhereExplainedAllowed");
         }
       });
     });
@@ -403,10 +408,10 @@ function getTab(callback) {
 // to open in regular tab even if the popup is opened in incognito mode.
 
 document.addEventListener('click', e => {
-  const { target } = e
+  const { target } = e;
 
   if (target.matches('a[target="_blank"]')) {
-    chrome.tabs.create({ url: target.href })
-    e.preventDefault()
+    chrome.tabs.create({ url: target.href });
+    e.preventDefault();
   }
-})
+});

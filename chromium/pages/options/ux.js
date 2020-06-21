@@ -5,7 +5,43 @@
 
 "use strict";
 
+if (navigator.userAgent.includes("Android")) {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.get('redirected')) {
+    url.searchParams.set('redirected', true);
+    document.body.innerText = "";
+    let link = document.createElement("a");
+    link.href = url.href;
+    link.target = "_blank";
+    link.className = "settings";
+    link.innerText = chrome.i18n.getMessage("options_settings");
+    document.body.appendChild(link);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  const secretArea = document.getElementById('secretArea');
+
+  const onKeyDownHandler = evt => {
+    if (evt.ctrlKey && evt.key === 'z') {
+      secretArea.classList.remove('hidden');
+      secretArea.classList.add('flash');
+
+      sendMessage('set_option', { developerMode: true });
+
+      document.removeEventListener('keydown', onKeyDownHandler);
+
+      evt.preventDefault();
+    }
+  };
+
+  sendMessage('get_option', { developerMode: false }, item => {
+    if (item.developerMode) {
+      secretArea.classList.remove('hidden');
+    } else {
+      document.addEventListener('keydown', onKeyDownHandler);
+    }
+  });
 
   const autoUpdateRulesets = document.getElementById("autoUpdateRulesets");
   const enableMixedRulesets = document.getElementById("enableMixedRulesets");
@@ -55,7 +91,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  function create_update_channel_element(update_channel, last_updated, pinned) {
+  function create_update_channel_element(update_channel, last_updated, locked) {
     let ruleset_version_string;
 
     if(last_updated) {
@@ -90,7 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const update_channel_jwk = document.createElement('textarea');
     update_channel_jwk.className = "update-channel-jwk";
     update_channel_jwk.setAttribute("data-name", update_channel.name);
-    update_channel_jwk.disabled = pinned;
+    update_channel_jwk.disabled = locked;
     update_channel_jwk.innerText = JSON.stringify(update_channel.jwk);
     update_channel_jwk_column_right.appendChild(update_channel_jwk);
 
@@ -108,7 +144,7 @@ document.addEventListener("DOMContentLoaded", () => {
     update_channel_path_prefix.setAttribute("type", "text");
     update_channel_path_prefix.className = "update-channel-path-prefix";
     update_channel_path_prefix.setAttribute("data-name", update_channel.name);
-    update_channel_path_prefix.disabled = pinned;
+    update_channel_path_prefix.disabled = locked;
     update_channel_path_prefix.value = update_channel.update_path_prefix;
     update_channel_path_prefix_column_right.appendChild(update_channel_path_prefix);
 
@@ -130,7 +166,7 @@ document.addEventListener("DOMContentLoaded", () => {
     update_channel_scope.setAttribute("type", "text");
     update_channel_scope.className = "update-channel-scope";
     update_channel_scope.setAttribute("data-name", update_channel.name);
-    update_channel_scope.disabled = pinned;
+    update_channel_scope.disabled = locked;
     update_channel_scope.value = update_channel.scope;
     update_channel_scope_column_right.appendChild(update_channel_scope);
 
@@ -147,13 +183,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const update_channel_update = document.createElement('button');
     update_channel_update.className = "update-channel-update";
     update_channel_update.setAttribute("data-name", update_channel.name);
-    update_channel_update.disabled = pinned;
+    update_channel_update.disabled = locked;
     update_channel_update.innerText = chrome.i18n.getMessage("options_update");
     update_channel_controls_column_right.appendChild(update_channel_update);
     const update_channel_delete = document.createElement('button');
     update_channel_delete.className = "update-channel-update";
     update_channel_delete.setAttribute("data-name", update_channel.name);
-    update_channel_delete.disabled = pinned;
+    update_channel_delete.disabled = locked;
     update_channel_delete.innerText = chrome.i18n.getMessage("options_delete");
     update_channel_controls_column_right.appendChild(update_channel_delete);
 
@@ -193,7 +229,7 @@ document.addEventListener("DOMContentLoaded", () => {
           create_update_channel_element(
             update_channel,
             item.last_updated[update_channel.name],
-            true
+            true,
           )
         );
 
@@ -206,7 +242,7 @@ document.addEventListener("DOMContentLoaded", () => {
           create_update_channel_element(
             update_channel,
             item.last_updated[update_channel.name],
-            false
+            update_channel.locked === true,
           )
         );
       }
@@ -246,7 +282,7 @@ document.addEventListener("DOMContentLoaded", () => {
       let remove = templateRemove.cloneNode(true);
 
       user_rule_host.className = "user-rules-list-item";
-      user_rule_name.className = "user-rules-list-item-single"
+      user_rule_name.className = "user-rules-list-item-single";
       user_rule_name.innerText = userRule.name;
       user_rule_host.appendChild(user_rule_name);
       user_rules_parent.appendChild(user_rule_host);
@@ -259,16 +295,12 @@ document.addEventListener("DOMContentLoaded", () => {
         sendMessage("remove_rule", { ruleset: userRule, src: 'options' });
       });
     }
-  })
+  });
 
   // HTTPS Everywhere Sites Disabled section in General Settings module
   getOption_("disabledList", [], function(item) {
     let rule_host_parent = e("disabled-rules-wrapper");
 
-    if( 0 === item.disabledList.length ) {
-      hide(rule_host_parent);
-      return;
-    }
     // img element "remove button"
     let templateRemove = document.createElement("img");
     templateRemove.src = chrome.runtime.getURL("images/remove.png");
@@ -281,7 +313,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let rule_host_site_name = document.createElement("p");
 
         rule_host.className = "disabled-rule-list-item";
-        rule_host_site_name.className = "disabled-rule-list-item_single"
+        rule_host_site_name.className = "disabled-rule-list-item_single";
         rule_host_site_name.innerText = key;
         rule_host.appendChild( rule_host_site_name);
         rule_host_parent.appendChild(rule_host);
@@ -293,6 +325,18 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
     }
+  });
+
+  const add_disabled_site = document.getElementById("add-disabled-site");
+  const disabled_site_input = document.getElementById("disabled-site");
+  disabled_site_input.setAttribute("placeholder", chrome.i18n.getMessage("options_enterDisabledSite"));
+
+  add_disabled_site.addEventListener("click", function() {
+    sendMessage("disable_on_site", disabled_site_input.value, okay => {
+      if (okay) {
+        chrome.tabs.reload();
+      }
+    });
   });
 
   add_update_channel.addEventListener("click", () => {
@@ -336,11 +380,4 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     update_channels_last_checked.innerText = chrome.i18n.getMessage("options_updatesLastChecked") + last_checked_string;
   });
-
-  document.onkeydown = function(evt) {
-    evt = evt || window.event;
-    if (evt.ctrlKey && evt.keyCode == 90) {
-      window.open("/pages/debugging-rulesets/index.html");
-    }
-  };
 });

@@ -83,7 +83,7 @@ Scan your site at the [Mozilla Observatory](https://observatory.mozilla.org/) an
 
 **"How do I get on the HSTS Preload list?"**
 
-In order to do this, you must have an SSL certificate correctly installed and your site redirecting to HTTPS. As well as meet a few extra requirements for the [`HTTP Strict-Transport-Security`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security) header. To view "how close" your site is for HSTS preloading, scan your site [here](https://hstspreload.org/).
+In order to do this, you must have an SSL certificate correctly installed and your site redirecting to HTTPS. As well as meet a few extra requirements for the [`HTTP Strict-Transport-Security`](https://developer.mozilla.org/docs/Web/HTTP/Headers/Strict-Transport-Security) header. To view "how close" your site is for HSTS preloading, scan your site [here](https://hstspreload.org/).
 
 * * *
 
@@ -368,7 +368,7 @@ Officially supported browsers:
 
 We also informally support the Opera browser, but do not have tooling around testing Opera.  Firefox ESR is supported because this is what the [Tor Browser](https://www.torproject.org/projects/torbrowser.html.en), which includes HTTPS Everywhere, is built upon.  For the test commands, refer to [README.md](README.md).
 
-The current extension maintainer is @Hainish.  You can tag him for PRs which involve the core codebase.
+The current extension maintainer is [@zoracon](https://github.com/zoracon).  You can tag them for PRs which involve the core codebase.
 
 Several of our utilities and our full test suite is written in Python.  Eventually we would like the whole codebase to be standardized as JavaScript.  If you are so inclined, it would be helpful to rewrite the tooling and tests into JavaScript while maintaining the functionality.
 

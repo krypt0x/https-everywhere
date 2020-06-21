@@ -1,4 +1,10 @@
-'use strict'
+'use strict';
+
+const text_encoding = require('text-encoding');
+global.TextDecoder = text_encoding.TextDecoder;
+global.TextEncoder = text_encoding.TextEncoder;
+global.self = global;
+require("../../lib-wasm/pkg/https_everywhere_lib_wasm.js");
 
 const assert = require('chai').assert,
   rules = require('../background-scripts/rules');
@@ -11,18 +17,6 @@ const Rule = rules.Rule,
 
 describe('rules.js', function() {
   let test_str = 'test';
-
-  describe('nullIterable', function() {
-    it('is iterable zero times and is size 0', function() {
-      let count = 0;
-      for (let _ of rules.nullIterable) { // eslint-disable-line no-unused-vars
-        count += 1;
-      }
-      assert.strictEqual(count, 0);
-      assert.strictEqual(rules.nullIterable.size,  0);
-      assert.isEmpty(rules.nullIterable);
-    });
-  });
 
   describe('Rule', function() {
     it('constructs trivial rule', function() {
@@ -94,7 +88,7 @@ describe('rules.js', function() {
         assert.isTrue(rs.isEquivalentTo(rs));
       });
     });
-  })
+  });
 
   describe('RuleSets', function() {
     let rules_json = [{
@@ -131,7 +125,7 @@ describe('rules.js', function() {
 
         let newuri = this.rsets.rewriteURI('http://' + host + '/', host);
 
-        assert.strictEqual(newuri, 'https://' + host + '/', 'protocol changed to https')
+        assert.strictEqual(newuri, 'https://' + host + '/', 'protocol changed to https');
       });
 
       it('does not rewrite unknown hosts', function() {
@@ -224,4 +218,4 @@ describe('rules.js', function() {
       });
     });
   });
-})
+});
