@@ -19,6 +19,7 @@
             "external/pako-1.0.5/pako_inflate.min.js",
             "background-scripts/incognito.js",
             "background-scripts/ip_utils.js",
+            "background-scripts/modules/ssl_codes.js",
             "background-scripts/background.js"
         ]
     },
@@ -37,7 +38,7 @@
         "128": "images/icons/icon-active-128.png",
         "48": "images/icons/icon-active-48.png"
     },
-    "incognito": "spanning",
+    "incognito": "split",
     "manifest_version": 2,
     "minimum_chrome_version": "55",
     "name": "__MSG_about_ext_name__",
